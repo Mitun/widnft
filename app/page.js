@@ -4,6 +4,8 @@ import Header from "./components/Header";
 import { ethers } from "ethers";
 import { useEffect, useState } from "react";
 import contactabi from "./abi/abi.json";
+const axios = require("axios");
+const FormData = require("form-data");
 
 export default function Home() {
   const [address, setAddress] = useState(null);
@@ -22,7 +24,7 @@ export default function Home() {
         const balance = await provider.getBalance(address);
         setAddress(address);
         //setBalance(ethers?.utils?.parseEther(balance));
-        myContractAddress = "0xE52a1C056a87A05472c86F626E5a76dab8061864";
+        const myContractAddress = "0xe6b0f97e12177Ffe74c9E6c07E2f2a0887A4c22f";
         const contract = new ethers.Contract(
           myContractAddress,
           contactabi,
@@ -35,9 +37,74 @@ export default function Home() {
   }, []);
 
   function onChangeValue(e) {
-    const file = e.target;
+    const file = e.target.files[0];
     setImage(file);
+    console.log(file);
   }
+  async function onSubmit(event) {
+    if (!name && !description && !image) {
+      alert("Fill the required details");
+      return;
+    }
+    const JWT =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySW5mb3JtYXRpb24iOnsiaWQiOiJjYWYyNjJjNS1lZTU2LTQyZGYtODg3MS0zYzYzYTAxYTA0OTMiLCJlbWFpbCI6Im1pdHVuc2hpbDc0N0BnbWFpbC5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGluX3BvbGljeSI6eyJyZWdpb25zIjpbeyJpZCI6IkZSQTEiLCJkZXNpcmVkUmVwbGljYXRpb25Db3VudCI6MX0seyJpZCI6Ik5ZQzEiLCJkZXNpcmVkUmVwbGljYXRpb25Db3VudCI6MX1dLCJ2ZXJzaW9uIjoxfSwibWZhX2VuYWJsZWQiOmZhbHNlLCJzdGF0dXMiOiJBQ1RJVkUifSwiYXV0aGVudGljYXRpb25UeXBlIjoic2NvcGVkS2V5Iiwic2NvcGVkS2V5S2V5IjoiNzljY2NhYmJmOGE0Y2RiMmFmOGUiLCJzY29wZWRLZXlTZWNyZXQiOiJmODg5NzE2MzViNzY0NGNlYzE4OGI2NzFlZTJiODZiODQ5MDMyMGI0MWIzZjYyNWQ3ODQ4NmNkYmQ2Yzg2NjYzIiwiaWF0IjoxNjk0MjUwMjc2fQ.1Urp80DzpKX7I0iTPgmWJ2j55SEYU0eWUAtTds8A5XA";
+    event.preventDefault();
+
+    const formData = new FormData();
+    formData.append("file", image);
+
+    const pinataMetadata = JSON.stringify({
+      name: "File name",
+    });
+    formData.append("pinataMetadata", pinataMetadata);
+
+    const pinataOptions = JSON.stringify({
+      cidVersion: 0,
+    });
+    formData.append("pinataOptions", pinataOptions);
+
+    try {
+      const res = await axios.post(
+        "https://api.pinata.cloud/pinning/pinFileToIPFS",
+        formData,
+        {
+          maxBodyLength: "Infinity",
+          headers: {
+            "Content-Type": `multipart/form-data; boundary=${formData._boundary}`,
+            Authorization: "Bearer " + JWT,
+          },
+        }
+      );
+
+      const ipfshash = res.data.IpfsHash;
+      try {
+        const jsondic = {
+          name,
+          description,
+          image: `ipfs/${ipfshash}`,
+        };
+        const resjson = await axios.post(
+          "https://api.pinata.cloud/pinning/pinJSONToIPFS",
+          jsondic,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: "Bearer " + JWT,
+            },
+          }
+        );
+        const jasonHash = resjson.data.IpfsHash;
+        const tokenURI = `https://ipfs.io/ipfs/${jasonHash}`;
+        const conc = contract?.mintNFT(address, tokenURI);
+        console.log("My own token ID:", conc);
+      } catch (error) {
+        console.error(error);
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
   return (
     <main className="bg-orange-200">
       <div>
@@ -69,8 +136,11 @@ export default function Home() {
               }}
             />
             <label>Upload Image</label>
-            <input type="file" value={image} onChange={onChangeValue} />
-            <button className="bg-blue-400 px-4 py-2 rounded-lg ">
+            <input type="file" onChange={onChangeValue} />
+            <button
+              className="bg-blue-400 px-4 py-2 rounded-lg"
+              onClick={onSubmit}
+            >
               Submit
             </button>
           </div>
